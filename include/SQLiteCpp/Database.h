@@ -76,6 +76,18 @@ class Database
     friend class Statement; // Give Statement constructor access to the mpSQLite Connection Handle
 
 public:
+
+    Database() : mpSQLite(nullptr) {
+    }
+
+    bool Open(const char* apFilename,
+        const int   aFlags = SQLite::OPEN_READONLY,
+        const int   aBusyTimeoutMs = 0,
+        const char* apVfs = nullptr);
+
+    void Close();
+    bool WALCheckpoint();
+
     /**
      * @brief Open the provided database UTF-8 filename.
      *

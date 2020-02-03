@@ -49,6 +49,52 @@ int getLibVersionNumber() noexcept // nothrow
 }
 
 
+bool Database::Open(const char* apFilename,
+        const int   aFlags         /* = SQLite::OPEN_READONLY*/,
+        const int   aBusyTimeoutMs /* = 0 */,
+        const char* apVfs          /* = nullptr*/)
+{
+    mFilename = apFilename;
+
+    const int ret = sqlite3_open_v2(apFilename, &mpSQLite, aFlags, apVfs);
+    if (SQLITE_OK != ret)
+    {
+        const SQLite::Exception exception(mpSQLite, ret); // must create before closing
+        sqlite3_close(mpSQLite); // close is required even in case of error on opening
+        throw exception;
+    }
+    if (aBusyTimeoutMs > 0)
+    {
+        setBusyTimeout(aBusyTimeoutMs);
+    }
+}
+
+void Database::Close()
+{
+    if (mpSQLite) {
+        const int ret = sqlite3_close(mpSQLite);
+        mpSQLite = nullptr;
+        // Avoid unreferenced variable warning when build in release mode
+        (void)ret;
+
+        // Only case of error is SQLITE_BUSY: "database is locked" (some statements are not finalized)
+        // Never throw an exception in a destructor :
+        SQLITECPP_ASSERT(SQLITE_OK == ret, "database is locked");  // See SQLITECPP_ENABLE_ASSERT_HANDLER
+    }
+}
+
+bool Database::WALCheckpoint()
+{
+    int nLogs = 0, nChecks = 0;
+    const int ret = sqlite3_wal_checkpoint_v2(getHandle(), NULL, SQLITE_CHECKPOINT_PASSIVE, &nLogs, &nChecks);
+    if (SQLITE_OK != ret) {
+        const SQLite::Exception exception(mpSQLite, ret); // must create before closing
+        throw exception;
+    }
+
+    return true;
+}
+
 // Open the provided database UTF-8 filename with SQLite::OPEN_xxx provided flags.
 Database::Database(const char* apFilename,
                    const int   aFlags         /* = SQLite::OPEN_READONLY*/,
@@ -94,14 +140,7 @@ Database::Database(const std::string& aFilename,
 // Close the SQLite database connection.
 Database::~Database()
 {
-    const int ret = sqlite3_close(mpSQLite);
-
-    // Avoid unreferenced variable warning when build in release mode
-    (void) ret;
-
-    // Only case of error is SQLITE_BUSY: "database is locked" (some statements are not finalized)
-    // Never throw an exception in a destructor :
-    SQLITECPP_ASSERT(SQLITE_OK == ret, "database is locked");  // See SQLITECPP_ENABLE_ASSERT_HANDLER
+    Close();
 }
 
 /**
